@@ -1,7 +1,14 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { createClient } from '@supabase/supabase-js'
 import { Search, Download, RefreshCw, ExternalLink, TrendingUp, Award, Briefcase, ClipboardList } from 'lucide-react'
+
+// ─── Supabase ─────────────────────────────────────────────────────────────────
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Job {
@@ -14,16 +21,11 @@ type Status  = 'postule' | 'entretien' | 'refus'
 
 // ─── Countries ────────────────────────────────────────────────────────────────
 const COUNTRIES = [
-  { code:'fr', label:'🇫🇷 France' },
-  { code:'be', label:'🇧🇪 Belgique' },
-  { code:'ch', label:'🇨🇭 Suisse' },
-  { code:'lu', label:'🇱🇺 Luxembourg' },
-  { code:'gb', label:'🇬🇧 Royaume-Uni' },
-  { code:'de', label:'🇩🇪 Allemagne' },
-  { code:'nl', label:'🇳🇱 Pays-Bas' },
-  { code:'es', label:'🇪🇸 Espagne' },
-  { code:'it', label:'🇮🇹 Italie' },
-  { code:'at', label:'🇦🇹 Autriche' },
+  { code:'fr', label:'🇫🇷 France' }, { code:'be', label:'🇧🇪 Belgique' },
+  { code:'ch', label:'🇨🇭 Suisse' }, { code:'lu', label:'🇱🇺 Luxembourg' },
+  { code:'gb', label:'🇬🇧 Royaume-Uni' }, { code:'de', label:'🇩🇪 Allemagne' },
+  { code:'nl', label:'🇳🇱 Pays-Bas' }, { code:'es', label:'🇪🇸 Espagne' },
+  { code:'it', label:'🇮🇹 Italie' }, { code:'at', label:'🇦🇹 Autriche' },
   { code:'pt', label:'🇵🇹 Portugal' },
 ]
 
@@ -31,83 +33,66 @@ const CITIES_BY_COUNTRY: Record<string, string[]> = {
   fr: ['Paris','Lyon','Bordeaux','Toulouse','Nantes','Lille','Strasbourg','Marseille','Montpellier','Remote'],
   be: ['Bruxelles','Anvers','Gand','Liège','Remote'],
   ch: ['Genève','Zurich','Lausanne','Berne','Remote'],
-  lu: ['Luxembourg'],
-  gb: ['London','Manchester','Edinburgh','Bristol','Remote'],
+  lu: ['Luxembourg'], gb: ['London','Manchester','Edinburgh','Bristol','Remote'],
   de: ['Berlin','Munich','Hamburg','Frankfurt','Remote'],
   nl: ['Amsterdam','Rotterdam','Utrecht','Remote'],
   es: ['Madrid','Barcelona','Valencia','Remote'],
   it: ['Milan','Rome','Turin','Remote'],
-  at: ['Vienna','Graz','Remote'],
-  pt: ['Lisbon','Porto','Remote'],
+  at: ['Vienna','Graz','Remote'], pt: ['Lisbon','Porto','Remote'],
 }
 
-// ─── Skills extraction étendue ────────────────────────────────────────────────
+// ─── Skills ───────────────────────────────────────────────────────────────────
 const STACK_PATTERNS: Record<string, RegExp[]> = {
-  Python:        [/\bpython\b/i],
-  SQL:           [/\bsql\b/i, /postgresql/i, /mysql/i, /\bsqlite\b/i],
-  Spark:         [/\bspark\b/i, /pyspark/i],
-  AWS:           [/\baws\b/i, /amazon web services/i, /sagemaker/i, /\bs3\b/i, /\bec2\b/i, /\blambda\b/i],
-  GCP:           [/\bgcp\b/i, /google cloud/i, /bigquery/i, /vertex ai/i, /dataflow/i],
-  Azure:         [/\bazure\b/i, /microsoft azure/i, /synapse/i, /azure ml/i],
-  Docker:        [/\bdocker\b/i, /conteneur/i, /containeris/i],
-  Kubernetes:    [/kubernetes/i, /\bk8s\b/i, /kubeflow/i, /helm\b/i],
-  Airflow:       [/airflow/i, /apache airflow/i],
-  dbt:           [/\bdbt\b/i, /data build tool/i],
-  Kafka:         [/\bkafka\b/i, /apache kafka/i],
-  MLflow:        [/mlflow/i],
-  TensorFlow:    [/tensorflow/i],
-  PyTorch:       [/pytorch/i],
-  'scikit-learn':[/scikit.?learn/i, /\bsklearn\b/i],
-  Databricks:    [/databricks/i],
-  'Power BI':    [/power.?bi/i],
-  Tableau:       [/\btableau\b/i],
-  Snowflake:     [/snowflake/i],
-  FastAPI:       [/fastapi/i],
-  LangChain:     [/langchain/i],
-  'LLM/GenAI':   [/\bllm\b/i, /genai/i, /generative ai/i, /\brag\b/i, /gpt/i, /langchain/i, /llama/i],
-  Looker:        [/\blooker\b/i],
-  Scala:         [/\bscala\b/i],
-  R:             [/\blanguage r\b/i, /\bR\b(?= pour| studio)/i, /rstudio/i],
-  Hadoop:        [/hadoop/i, /hdfs/i, /hive\b/i],
-  Terraform:     [/terraform/i],
-  Git:           [/\bgit\b/i, /github/i, /gitlab/i],
-  Pandas:        [/\bpandas\b/i],
-  'NumPy':       [/\bnumpy\b/i],
-  Streamlit:     [/streamlit/i],
-  'NoSQL':       [/\bmongodb\b/i, /\bcassandra\b/i, /\belasticsearch\b/i, /nosql/i, /redis/i],
+  Python: [/\bpython\b/i], SQL: [/\bsql\b/i, /postgresql/i, /mysql/i],
+  Spark: [/\bspark\b/i, /pyspark/i], AWS: [/\baws\b/i, /sagemaker/i, /\bs3\b/i],
+  GCP: [/\bgcp\b/i, /google cloud/i, /bigquery/i, /vertex/i],
+  Azure: [/\bazure\b/i, /synapse/i], Docker: [/\bdocker\b/i],
+  Kubernetes: [/kubernetes/i, /\bk8s\b/i], Airflow: [/airflow/i],
+  dbt: [/\bdbt\b/i], Kafka: [/\bkafka\b/i], MLflow: [/mlflow/i],
+  TensorFlow: [/tensorflow/i], PyTorch: [/pytorch/i],
+  'scikit-learn': [/scikit.?learn/i, /\bsklearn\b/i],
+  Databricks: [/databricks/i], 'Power BI': [/power.?bi/i],
+  Tableau: [/\btableau\b/i], Snowflake: [/snowflake/i],
+  'LLM/GenAI': [/\bllm\b/i, /genai/i, /\brag\b/i, /gpt/i, /langchain/i],
+  FastAPI: [/fastapi/i], Terraform: [/terraform/i],
+  Git: [/\bgit\b/i, /github/i, /gitlab/i],
+  Pandas: [/\bpandas\b/i], Streamlit: [/streamlit/i],
+  NoSQL: [/mongodb/i, /elasticsearch/i, /\bredis\b/i, /nosql/i],
+  Scala: [/\bscala\b/i], Hadoop: [/hadoop/i, /hdfs/i],
+  R: [/\brstudio\b/i, /\blanguage r\b/i],
 }
 
 function analyzeSkills(jobs: Job[]): Record<string, number> {
   const freq: Record<string, number> = {}
   jobs.forEach(j => {
-    const text = `${j.title} ${j.desc} ${j.tags.join(' ')}`
-    Object.entries(STACK_PATTERNS).forEach(([stack, pats]) => {
-      if (pats.some(p => p.test(text))) freq[stack] = (freq[stack] || 0) + 1
+    const text = `${j.title} ${j.desc}`
+    Object.entries(STACK_PATTERNS).forEach(([s, pats]) => {
+      if (pats.some(p => p.test(text))) freq[s] = (freq[s] || 0) + 1
     })
   })
   return freq
 }
 
-// ─── Certifications ───────────────────────────────────────────────────────────
+// ─── Certifs ─────────────────────────────────────────────────────────────────
 const CERTS: Record<string, { name: string; provider: string; level: string; time: string; link: string; stack: string; free?: boolean }> = {
-  Python:        { stack:'Python',        name:'PCEP — Python Entry-Level',                  provider:'Python Institute',    level:'Débutant',      time:'~2 semaines', link:'https://pythoninstitute.org/pcep' },
-  'LLM/GenAI':   { stack:'LLM/GenAI',    name:'LLM Engineering with LangChain',              provider:'DeepLearning.AI',     level:'Intermédiaire', time:'~3 semaines', link:'https://www.deeplearning.ai/courses/', free:true },
-  AWS:           { stack:'AWS',           name:'AWS Certified ML Specialty',                  provider:'Amazon Web Services', level:'Avancé',        time:'~3 mois',     link:'https://aws.amazon.com/certification/certified-machine-learning-specialty/' },
-  GCP:           { stack:'GCP',           name:'Google Professional Data Engineer',           provider:'Google Cloud',        level:'Avancé',        time:'~2 mois',     link:'https://cloud.google.com/learn/certification/data-engineer' },
-  Azure:         { stack:'Azure',         name:'Azure DP-100 Data Scientist Associate',       provider:'Microsoft',           level:'Intermédiaire', time:'~2 mois',     link:'https://learn.microsoft.com/certifications/azure-data-scientist/' },
-  Spark:         { stack:'Spark',         name:'Databricks Associate Dev for Spark',          provider:'Databricks',          level:'Intermédiaire', time:'~6 semaines', link:'https://www.databricks.com/learn/certification/apache-spark-developer-associate' },
-  Databricks:    { stack:'Databricks',    name:'Databricks Certified ML Associate',           provider:'Databricks',          level:'Intermédiaire', time:'~6 semaines', link:'https://www.databricks.com/learn/certification/machine-learning-associate' },
-  Kubernetes:    { stack:'Kubernetes',    name:'CKA — Certified Kubernetes Administrator',    provider:'Linux Foundation',    level:'Avancé',        time:'~3 mois',     link:'https://training.linuxfoundation.org/certification/certified-kubernetes-administrator-cka/' },
-  dbt:           { stack:'dbt',           name:'dbt Analytics Engineer Certification',        provider:'dbt Labs',            level:'Intermédiaire', time:'~1 mois',     link:'https://www.getdbt.com/certifications/analytics-engineer-certification-exam/' },
-  Snowflake:     { stack:'Snowflake',     name:'SnowPro Core Certification',                  provider:'Snowflake',           level:'Intermédiaire', time:'~6 semaines', link:'https://www.snowflake.com/certifications/' },
-  TensorFlow:    { stack:'TensorFlow',    name:'TensorFlow Developer Certificate',            provider:'Google',              level:'Intermédiaire', time:'~2 mois',     link:'https://www.tensorflow.org/certificate' },
-  Docker:        { stack:'Docker',        name:'Docker Certified Associate',                  provider:'Docker Inc.',         level:'Intermédiaire', time:'~6 semaines', link:'https://training.mirantis.com/certification/dca-certification-exam/' },
-  'Power BI':    { stack:'Power BI',      name:'PL-300 Microsoft Power BI Data Analyst',      provider:'Microsoft',           level:'Intermédiaire', time:'~6 semaines', link:'https://learn.microsoft.com/certifications/power-bi-data-analyst-associate/' },
-  SQL:           { stack:'SQL',           name:'SQL for Data Science (Coursera)',              provider:'UC Davis / Coursera', level:'Débutant',      time:'~3 semaines', link:'https://www.coursera.org/learn/sql-for-data-science', free:true },
-  Terraform:     { stack:'Terraform',     name:'HashiCorp Terraform Associate',               provider:'HashiCorp',           level:'Intermédiaire', time:'~1 mois',     link:'https://developer.hashicorp.com/certifications/infrastructure-automation' },
+  Python:      { stack:'Python',      name:'PCEP — Python Entry-Level',               provider:'Python Institute',    level:'Débutant',      time:'~2 semaines', link:'https://pythoninstitute.org/pcep' },
+  'LLM/GenAI': { stack:'LLM/GenAI',  name:'LLM Engineering with LangChain',           provider:'DeepLearning.AI',     level:'Intermédiaire', time:'~3 semaines', link:'https://www.deeplearning.ai/courses/', free:true },
+  AWS:         { stack:'AWS',         name:'AWS Certified ML Specialty',               provider:'Amazon Web Services', level:'Avancé',        time:'~3 mois',     link:'https://aws.amazon.com/certification/certified-machine-learning-specialty/' },
+  GCP:         { stack:'GCP',         name:'Google Professional Data Engineer',        provider:'Google Cloud',        level:'Avancé',        time:'~2 mois',     link:'https://cloud.google.com/learn/certification/data-engineer' },
+  Azure:       { stack:'Azure',       name:'Azure DP-100 Data Scientist Associate',    provider:'Microsoft',           level:'Intermédiaire', time:'~2 mois',     link:'https://learn.microsoft.com/certifications/azure-data-scientist/' },
+  Spark:       { stack:'Spark',       name:'Databricks Associate Dev for Spark',       provider:'Databricks',          level:'Intermédiaire', time:'~6 semaines', link:'https://www.databricks.com/learn/certification/apache-spark-developer-associate' },
+  Databricks:  { stack:'Databricks',  name:'Databricks Certified ML Associate',        provider:'Databricks',          level:'Intermédiaire', time:'~6 semaines', link:'https://www.databricks.com/learn/certification/machine-learning-associate' },
+  Kubernetes:  { stack:'Kubernetes',  name:'CKA — Certified Kubernetes Administrator', provider:'Linux Foundation',    level:'Avancé',        time:'~3 mois',     link:'https://training.linuxfoundation.org/certification/certified-kubernetes-administrator-cka/' },
+  dbt:         { stack:'dbt',         name:'dbt Analytics Engineer Certification',     provider:'dbt Labs',            level:'Intermédiaire', time:'~1 mois',     link:'https://www.getdbt.com/certifications/analytics-engineer-certification-exam/' },
+  Snowflake:   { stack:'Snowflake',   name:'SnowPro Core Certification',               provider:'Snowflake',           level:'Intermédiaire', time:'~6 semaines', link:'https://www.snowflake.com/certifications/' },
+  TensorFlow:  { stack:'TensorFlow',  name:'TensorFlow Developer Certificate',         provider:'Google',              level:'Intermédiaire', time:'~2 mois',     link:'https://www.tensorflow.org/certificate' },
+  Docker:      { stack:'Docker',      name:'Docker Certified Associate',               provider:'Docker Inc.',         level:'Intermédiaire', time:'~6 semaines', link:'https://training.mirantis.com/certification/dca-certification-exam/' },
+  'Power BI':  { stack:'Power BI',    name:'PL-300 Microsoft Power BI Data Analyst',   provider:'Microsoft',           level:'Intermédiaire', time:'~6 semaines', link:'https://learn.microsoft.com/certifications/power-bi-data-analyst-associate/' },
+  SQL:         { stack:'SQL',         name:'SQL for Data Science (Coursera)',           provider:'UC Davis / Coursera', level:'Débutant',      time:'~3 semaines', link:'https://www.coursera.org/learn/sql-for-data-science', free:true },
+  Terraform:   { stack:'Terraform',   name:'HashiCorp Terraform Associate',            provider:'HashiCorp',           level:'Intermédiaire', time:'~1 mois',     link:'https://developer.hashicorp.com/certifications/infrastructure-automation' },
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function ageLabel(age: number) {
   if (age === 0) return "Aujourd'hui"
   if (age === 1) return 'Hier'
@@ -121,14 +106,14 @@ function applySort(jobs: Job[], sort: SortKey, query: string): Job[] {
   if (sort === 'title')   return c.sort((a,b) => a.title.localeCompare(b.title))
   const words = query.toLowerCase().split(/\s+/)
   return c.sort((a,b) => {
-    const s = (j: Job) => words.reduce((n,w)=>n+(j.title.toLowerCase().includes(w)?1:0),0)
+    const s = (j:Job) => words.reduce((n,w)=>n+(j.title.toLowerCase().includes(w)?1:0),0)
     return s(b)-s(a)
   })
 }
 
 function exportCSV(jobs: Job[], statuses: Record<string,Status>) {
   const h = ['Titre','Entreprise','Ville','Pays','Contrat','Age (j)','Source','Statut','URL']
-  const r = jobs.map(j => [j.title, j.company, j.location, j.country, j.contrat, j.age, j.source, statuses[j.id]||'', j.url])
+  const r = jobs.map(j=>[j.title,j.company,j.location,j.country,j.contrat,j.age,j.source,statuses[j.id]||'',j.url])
   const csv = [h,...r].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')
   const a = Object.assign(document.createElement('a'),{
     href:URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'})),
@@ -137,7 +122,7 @@ function exportCSV(jobs: Job[], statuses: Record<string,Status>) {
   a.click()
 }
 
-function contratClass(c: string) {
+function contratClass(c:string) {
   if (c==='Alternance') return 'contrat-alternance'
   if (c==='Stage')      return 'contrat-stage'
   if (c==='Graduate')   return 'contrat-graduate'
@@ -146,49 +131,54 @@ function contratClass(c: string) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Home() {
-  const [tab, setTab]                 = useState<'offres'|'stacks'|'certifs'|'tracker'>('offres')
-  const [jobs, setJobs]               = useState<Job[]>([])
-  const [filtered, setFiltered]       = useState<Job[]>([])
-  const [loading, setLoading]         = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError]             = useState<string|null>(null)
-  const [query, setQuery]             = useState('data')
-  const [country, setCountry]         = useState('fr')
-  const [ville, setVille]             = useState('')
-  const [contrat, setContrat]         = useState('')
-  const [sort, setSort]               = useState<SortKey>('date')
-  const [page, setPage]               = useState(1)
-  const [hasMore, setHasMore]         = useState(true)
-  const [total, setTotal]             = useState(0)
-  const [skillFreq, setSkillFreq]     = useState<Record<string,number>>({})
-  const [statuses, setStatuses]       = useState<Record<string,Status>>({})
-  const [trackedJobs, setTrackedJobs] = useState<Record<string,Job>>({})
+  const [tab, setTab]                   = useState<'offres'|'stacks'|'certifs'|'tracker'>('offres')
+  const [trackerFilter, setTrackerFilter] = useState<'all'|Status>('all')
+  const [jobs, setJobs]                 = useState<Job[]>([])
+  const [filtered, setFiltered]         = useState<Job[]>([])
+  const [loading, setLoading]           = useState(false)
+  const [loadingMore, setLoadingMore]   = useState(false)
+  const [error, setError]               = useState<string|null>(null)
+  const [query, setQuery]               = useState('data')
+  const [country, setCountry]           = useState('fr')
+  const [ville, setVille]               = useState('')
+  const [contrat, setContrat]           = useState('')
+  const [sort, setSort]                 = useState<SortKey>('date')
+  const [page, setPage]                 = useState(1)
+  const [hasMore, setHasMore]           = useState(true)
+  const [total, setTotal]               = useState(0)
+  const [skillFreq, setSkillFreq]       = useState<Record<string,number>>({})
+  const [statuses, setStatuses]         = useState<Record<string,Status>>({})
+  const [trackedJobs, setTrackedJobs]   = useState<Record<string,Job>>({})
+  const [syncMsg, setSyncMsg]           = useState('')
 
-  // Load from localStorage
+  // ── Charger depuis Supabase au démarrage ──
   useEffect(() => {
-    try {
-      const s = localStorage.getItem('djt_statuses')
-      const t = localStorage.getItem('djt_tracked')
-      if (s) setStatuses(JSON.parse(s))
-      if (t) setTrackedJobs(JSON.parse(t))
-    } catch {}
+    async function load() {
+      const { data } = await supabase.from('candidatures').select('*')
+      if (!data) return
+      const st: Record<string,Status> = {}
+      const tj: Record<string,Job>    = {}
+      data.forEach((row:any) => {
+        st[row.id] = row.status as Status
+        tj[row.id] = {
+          id: row.id, title: row.title, company: row.company,
+          location: row.location, country: row.country,
+          contrat: row.contrat, age: row.age,
+          desc: '', tags: [], url: row.url, source: row.source,
+        }
+      })
+      setStatuses(st)
+      setTrackedJobs(tj)
+    }
+    load()
   }, [])
 
-  // Save to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('djt_statuses', JSON.stringify(statuses))
-      localStorage.setItem('djt_tracked', JSON.stringify(trackedJobs))
-    } catch {}
-  }, [statuses, trackedJobs])
-
-  // Reset ville when country changes
   useEffect(() => { setVille('') }, [country])
 
   useEffect(() => {
     let r = [...jobs]
-    if (ville)   r = r.filter(j => j.location.toLowerCase().includes(ville.toLowerCase()))
-    if (contrat) r = r.filter(j => j.contrat === contrat)
+    if (ville)   r = r.filter(j=>j.location.toLowerCase().includes(ville.toLowerCase()))
+    if (contrat) r = r.filter(j=>j.contrat===contrat)
     r = applySort(r, sort, query)
     setFiltered(r)
     setSkillFreq(analyzeSkills(r))
@@ -198,7 +188,7 @@ export default function Home() {
     p===1 ? setLoading(true) : setLoadingMore(true)
     setError(null)
     try {
-      const params = new URLSearchParams({ what:query, page:String(p), per_page:'20', country, contrat })
+      const params = new URLSearchParams({what:query, page:String(p), per_page:'20', country, contrat})
       const res  = await fetch(`/api/jobs?${params}`)
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -215,7 +205,7 @@ export default function Home() {
         url:      String(j.url??'#'),
         source:   String(j.source??'Adzuna'),
       }))
-      setJobs(prev => append ? [...prev,...newJobs] : newJobs)
+      setJobs(prev=>append?[...prev,...newJobs]:newJobs)
       setHasMore(newJobs.length>=20)
       setPage(p)
       setTotal(Number(data.count)||0)
@@ -225,19 +215,37 @@ export default function Home() {
 
   useEffect(() => { fetchJobs(1) }, [])
 
-  const setStatus = (job: Job, status: Status) => {
-    setStatuses(prev => {
-      const next = {...prev}
-      if (next[job.id]===status) { delete next[job.id]; return next }
-      next[job.id] = status
-      return next
-    })
-    setTrackedJobs(prev => ({ ...prev, [job.id]: job }))
+  // ── Sauvegarder dans Supabase ──
+  const setStatus = async (job: Job, status: Status) => {
+    const isRemoving = statuses[job.id] === status
+    
+    if (isRemoving) {
+      await supabase.from('candidatures').delete().eq('id', job.id)
+      setStatuses(prev => { const n={...prev}; delete n[job.id]; return n })
+      setTrackedJobs(prev => { const n={...prev}; delete n[job.id]; return n })
+    } else {
+      await supabase.from('candidatures').upsert({
+        id: job.id, title: job.title, company: job.company,
+        location: job.location, country: job.country,
+        contrat: job.contrat, url: job.url, source: job.source,
+        age: job.age, status, updated_at: new Date().toISOString()
+      })
+      setStatuses(prev => ({...prev, [job.id]: status}))
+      setTrackedJobs(prev => ({...prev, [job.id]: job}))
+      setSyncMsg('✅ Sauvegardé')
+      setTimeout(() => setSyncMsg(''), 2000)
+    }
   }
 
-  const removeTracked = (id: string) => {
+  const removeTracked = async (id: string) => {
+    await supabase.from('candidatures').delete().eq('id', id)
     setStatuses(prev => { const n={...prev}; delete n[id]; return n })
     setTrackedJobs(prev => { const n={...prev}; delete n[id]; return n })
+  }
+
+  const updateStatus = async (id: string, status: Status) => {
+    await supabase.from('candidatures').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
+    setStatuses(prev => ({...prev, [id]: status}))
   }
 
   const newCount     = jobs.filter(j=>j.age<=1).length
@@ -248,7 +256,8 @@ export default function Home() {
   ].slice(0,14)
 
   const trackedList  = Object.entries(statuses)
-  const cities       = CITIES_BY_COUNTRY[country] || []
+  const filteredTracker = trackerFilter==='all' ? trackedList : trackedList.filter(([,s])=>s===trackerFilter)
+  const cities = CITIES_BY_COUNTRY[country]||[]
 
   const statusLabel: Record<Status,string> = { postule:'✅ Postulé', entretien:'🟡 Entretien', refus:'❌ Refus' }
   const statusClass: Record<Status,string> = { postule:'s-postule', entretien:'s-entretien', refus:'s-refus' }
@@ -258,17 +267,18 @@ export default function Home() {
     <div>
       <header className="header">
         <div className="brand">
-          <div className="brand-dot" />
+          <div className="brand-dot"/>
           DataJob Tracker
-          {newCount > 0 && <span className="new-badge">+{newCount} nouvelles</span>}
-          {trackedList.length > 0 && <span className="new-badge" style={{background:'#4ade80',color:'#0a0f1e'}}>{trackedList.length} suivies</span>}
+          {newCount>0 && <span className="new-badge">+{newCount} nouvelles</span>}
+          {trackedList.length>0 && <span className="new-badge" style={{background:'#4ade80',color:'#0a0f1e'}}>{trackedList.length} suivies</span>}
+          {syncMsg && <span style={{fontSize:'11px',color:'#4ade80'}}>{syncMsg}</span>}
         </div>
         <nav className="nav">
-          {(['offres','stacks','certifs','tracker'] as const).map(t => (
+          {(['offres','stacks','certifs','tracker'] as const).map(t=>(
             <button key={t} onClick={()=>setTab(t)} className={`nav-btn${tab===t?' active':''}`}>
-              {t==='offres'  ? <><Briefcase    size={12}/>Offres</>
-               :t==='stacks' ? <><TrendingUp   size={12}/>Skills</>
-               :t==='certifs'? <><Award        size={12}/>Certifs</>
+              {t==='offres'  ? <><Briefcase     size={12}/>Offres</>
+               :t==='stacks' ? <><TrendingUp    size={12}/>Skills</>
+               :t==='certifs'? <><Award         size={12}/>Certifs</>
                :               <><ClipboardList size={12}/>Tracker</>}
             </button>
           ))}
@@ -281,14 +291,14 @@ export default function Home() {
         {tab==='offres' && <>
           <div className="search-row">
             <div className="search-wrap">
-              <Search size={14} className="search-icon" />
+              <Search size={14} className="search-icon"/>
               <input value={query} onChange={e=>setQuery(e.target.value)}
                 onKeyDown={e=>e.key==='Enter'&&fetchJobs(1)}
                 placeholder="ex: data scientist, MLOps, alternance data..."
-                className="search-input" />
+                className="search-input"/>
             </div>
             <button onClick={()=>fetchJobs(1)} disabled={loading} className="btn-search">
-              <RefreshCw size={13} className={loading?'spin':''} />
+              <RefreshCw size={13} className={loading?'spin':''}/>
               {loading?'Chargement…':'Rechercher'}
             </button>
           </div>
@@ -311,7 +321,7 @@ export default function Home() {
               <option value="company">Entreprise A–Z</option>
               <option value="title">Intitulé A–Z</option>
             </select>
-            <div className="spacer" />
+            <div className="spacer"/>
             <button onClick={()=>exportCSV(filtered,statuses)} className="btn-csv">
               <Download size={12}/> CSV
             </button>
@@ -330,15 +340,16 @@ export default function Home() {
            : filtered.length===0 ? <div className="empty">Aucune offre pour ces filtres.</div>
            : <>
               <div className="jobs-list">
-                {filtered.map(j => {
+                {filtered.map(j=>{
                   const st = statuses[j.id]
-                  const cardCls = `job-card${j.age<=1&&!st?' is-new':''} ${st===('applied' as any)||st==='postule'?' applied':''} ${st==='entretien'?' interview':''} ${st==='refus'?' rejected':''}`
+                  const cardCls = `job-card${j.age<=1&&!st?' is-new':''} ${st==='postule'?' applied':''} ${st==='entretien'?' interview':''} ${st==='refus'?' rejected':''}`
                   return (
                     <div key={j.id} className={cardCls}>
                       <div className="job-header">
                         <div className="job-title">{j.title}</div>
                         <div className="job-age-wrap">
                           {j.age<=1&&!st && <span className="new-pill">nouveau</span>}
+                          {st && <span className={`tracker-status ${statusClass[st]}`} style={{fontSize:'10px',padding:'2px 6px'}}>{statusLabel[st]}</span>}
                           <span className="job-age">{ageLabel(j.age)}</span>
                         </div>
                       </div>
@@ -399,11 +410,10 @@ export default function Home() {
         {tab==='certifs' && <>
           <p className="section-title">Certifications recommandées · basées sur les skills du marché</p>
           {topCerts.length===0
-            ? <div className="empty">Lance une recherche pour voir les certifs recommandées.</div>
+            ? <div className="empty">Lance une recherche pour voir les certifs.</div>
             : <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
                 {topCerts.map((cert,i)=>{
                   const freq = skillFreq[cert.stack]||0
-                  const lc = `level-badge level-${cert.level.toLowerCase()}`
                   return (
                     <div key={cert.stack} className="cert-card">
                       <div className={`cert-rank${i<3?' top':''}`}>{i+1}</div>
@@ -414,7 +424,7 @@ export default function Home() {
                         </div>
                         <div className="cert-provider">{cert.provider} · <code style={{fontSize:'11px'}}>{cert.stack}</code></div>
                         <div className="cert-meta">
-                          <span className={lc}>{cert.level}</span>
+                          <span className={`level-badge level-${cert.level.toLowerCase()}`}>{cert.level}</span>
                           <span className="cert-time">{cert.time}</span>
                           {freq>0 && <span className="cert-freq">citée dans {freq} offres</span>}
                         </div>
@@ -429,20 +439,37 @@ export default function Home() {
         {/* ── TRACKER ── */}
         {tab==='tracker' && <>
           <div className="tracker-stats">
-            <div className="tracker-stat"><div className="num t-blue">{trackedList.length}</div><div className="lbl">total suivies</div></div>
+            <div className="tracker-stat"><div className="num t-blue">{trackedList.length}</div><div className="lbl">total</div></div>
             <div className="tracker-stat"><div className="num t-green">{trackedList.filter(([,s])=>s==='postule').length}</div><div className="lbl">postulées</div></div>
             <div className="tracker-stat"><div className="num t-amber">{trackedList.filter(([,s])=>s==='entretien').length}</div><div className="lbl">entretiens</div></div>
             <div className="tracker-stat"><div className="num t-red">{trackedList.filter(([,s])=>s==='refus').length}</div><div className="lbl">refus</div></div>
           </div>
 
-          {trackedList.length===0
+          {/* Sous-filtres */}
+          <div style={{display:'flex',gap:'6px',marginBottom:'16px',flexWrap:'wrap'}}>
+            {(['all','postule','entretien','refus'] as const).map(f=>(
+              <button key={f} onClick={()=>setTrackerFilter(f)}
+                style={{padding:'5px 14px',borderRadius:'8px',border:'1px solid',cursor:'pointer',fontSize:'12px',fontWeight:500,
+                  background: trackerFilter===f ? (f==='postule'?'rgba(74,222,128,0.15)':f==='entretien'?'rgba(245,158,11,0.15)':f==='refus'?'rgba(248,113,113,0.15)':'rgba(14,165,233,0.15)') : 'transparent',
+                  color: trackerFilter===f ? (f==='postule'?'#4ade80':f==='entretien'?'#f59e0b':f==='refus'?'#f87171':'#0ea5e9') : '#64748b',
+                  borderColor: trackerFilter===f ? (f==='postule'?'rgba(74,222,128,0.4)':f==='entretien'?'rgba(245,158,11,0.4)':f==='refus'?'rgba(248,113,113,0.4)':'rgba(14,165,233,0.4)') : '#334155',
+                }}>
+                {f==='all'?'📋 Toutes':f==='postule'?'✅ Postulées':f==='entretien'?'🟡 Entretiens':'❌ Refus'}
+                <span style={{marginLeft:'5px',fontSize:'11px',opacity:0.7}}>
+                  {f==='all'?trackedList.length:trackedList.filter(([,s])=>s===f).length}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {filteredTracker.length===0
             ? <div className="tracker-empty">
                 <p style={{fontSize:'32px',marginBottom:'12px'}}>📋</p>
-                <p>Aucune candidature suivie.</p>
-                <p style={{fontSize:'12px',color:'#334155',marginTop:'6px'}}>Clique sur ✅ Postulé sur une offre pour l'ajouter ici.</p>
+                <p>{trackerFilter==='all'?"Aucune candidature suivie.":"Aucune candidature dans cette catégorie."}</p>
+                {trackerFilter==='all' && <p style={{fontSize:'12px',color:'#334155',marginTop:'6px'}}>Clique sur ✅ Postulé sur une offre pour l'ajouter ici.</p>}
               </div>
             : <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
-                {trackedList.map(([id,status])=>{
+                {filteredTracker.map(([id,status])=>{
                   const job = trackedJobs[id]
                   if (!job) return null
                   return (
@@ -451,6 +478,16 @@ export default function Home() {
                       <div className="tracker-info">
                         <div className="tracker-title">{job.title}</div>
                         <div className="tracker-meta">{job.company} · {job.location} · {job.country} · {job.contrat}</div>
+                        {/* Changer le statut depuis le tracker */}
+                        <div style={{display:'flex',gap:'5px',marginTop:'6px'}}>
+                          {(['postule','entretien','refus'] as Status[]).map(s=>(
+                            <button key={s} onClick={()=>updateStatus(id,s)}
+                              className={`status-btn${status===s?` active-${s}`:''}`}
+                              style={{fontSize:'10px',padding:'2px 7px'}}>
+                              {s==='postule'?'✅':s==='entretien'?'🟡':'❌'}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <span className={`tracker-status ${statusClass[status]}`}>{statusLabel[status]}</span>
                       <a href={job.url} target="_blank" rel="noopener noreferrer" className="btn-apply" style={{padding:'3px 8px'}}>
