@@ -206,7 +206,7 @@ export default function Home() {
         source:   String(j.source??'Adzuna'),
       }))
       setJobs(prev=>append?[...prev,...newJobs]:newJobs)
-      setHasMore(newJobs.length>=20)
+      setHasMore(newJobs.length===20)
       setPage(p)
       setTotal(Number(data.count)||0)
     } catch(e:any) { setError(String(e.message)) }
