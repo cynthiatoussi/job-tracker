@@ -85,7 +85,8 @@ async function fetchGoogleJobs(what: string, country: string) {
     else if (/stage|internship|intern\b/i.test(txt)) contrat = 'Stage'
 
     return {
-      id:       `serp_${i}_${Date.now()}`,
+      // Après — ID stable basé sur titre + entreprise
+      id: `serp_${Buffer.from(`${j.title}|${j.company_name}`).toString('base64').slice(0, 20)}`,
       title:    String(j.title || '—'),
       company:  String(j.company_name || '—'),
       location: String(j.location || countryName),
