@@ -205,8 +205,11 @@ export default function Home() {
         url:      String(j.url??'#'),
         source:   String(j.source??'Adzuna'),
       }))
-      setJobs(prev=>append?[...prev,...newJobs]:newJobs)
-      setHasMore(newJobs.length===20)
+      setJobs(prev => {
+        const updated = append ? [...prev, ...newJobs] : newJobs
+        setHasMore(updated.length < (Number(data.count) || 0))
+        return updated
+      })
       setPage(p)
       setTotal(Number(data.count)||0)
     } catch(e:any) { setError(String(e.message)) }
