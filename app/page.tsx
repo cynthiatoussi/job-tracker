@@ -1,16 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { Search, Download, RefreshCw, ExternalLink, TrendingUp, Award, Briefcase, ClipboardList } from 'lucide-react'
 
-// ─── Supabase ─────────────────────────────────────────────────────────────────
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 interface Job {
   id: string; title: string; company: string; location: string
   country: string; contrat: string; age: number; desc: string
@@ -19,7 +17,6 @@ interface Job {
 type SortKey = 'date' | 'relevance' | 'company' | 'title'
 type Status  = 'postule' | 'entretien' | 'refus'
 
-// ─── Countries ────────────────────────────────────────────────────────────────
 const COUNTRIES = [
   { code:'fr', label:'🇫🇷 France' }, { code:'be', label:'🇧🇪 Belgique' },
   { code:'ch', label:'🇨🇭 Suisse' }, { code:'lu', label:'🇱🇺 Luxembourg' },
@@ -41,10 +38,9 @@ const CITIES_BY_COUNTRY: Record<string, string[]> = {
   at: ['Vienna','Graz','Remote'], pt: ['Lisbon','Porto','Remote'],
 }
 
-// ─── Skills ───────────────────────────────────────────────────────────────────
 const STACK_PATTERNS: Record<string, RegExp[]> = {
   Python: [/\bpython\b/i], SQL: [/\bsql\b/i, /postgresql/i, /mysql/i],
-  Spark: [/\bspark\b/i, /pyspark/i], AWS: [/\baws\b/i, /sagemaker/i, /\bs3\b/i],
+  Spark: [/\bspark\b/i, /pyspark/i], AWS: [/\baws\b/i, /sagemaker/i],
   GCP: [/\bgcp\b/i, /google cloud/i, /bigquery/i, /vertex/i],
   Azure: [/\bazure\b/i, /synapse/i], Docker: [/\bdocker\b/i],
   Kubernetes: [/kubernetes/i, /\bk8s\b/i], Airflow: [/airflow/i],
@@ -59,7 +55,8 @@ const STACK_PATTERNS: Record<string, RegExp[]> = {
   Pandas: [/\bpandas\b/i], Streamlit: [/streamlit/i],
   NoSQL: [/mongodb/i, /elasticsearch/i, /\bredis\b/i, /nosql/i],
   Scala: [/\bscala\b/i], Hadoop: [/hadoop/i, /hdfs/i],
-  R: [/\brstudio\b/i, /\blanguage r\b/i],
+  Bloomberg: [/bloomberg/i], VBA: [/\bvba\b/i], Excel: [/\bexcel\b/i],
+  SAP: [/\bsap\b/i], R: [/\brstudio\b/i, /\blanguage r\b/i],
 }
 
 function analyzeSkills(jobs: Job[]): Record<string, number> {
@@ -73,7 +70,6 @@ function analyzeSkills(jobs: Job[]): Record<string, number> {
   return freq
 }
 
-// ─── Certifs ─────────────────────────────────────────────────────────────────
 const CERTS: Record<string, { name: string; provider: string; level: string; time: string; link: string; stack: string; free?: boolean }> = {
   Python:      { stack:'Python',      name:'PCEP — Python Entry-Level',               provider:'Python Institute',    level:'Débutant',      time:'~2 semaines', link:'https://pythoninstitute.org/pcep' },
   'LLM/GenAI': { stack:'LLM/GenAI',  name:'LLM Engineering with LangChain',           provider:'DeepLearning.AI',     level:'Intermédiaire', time:'~3 semaines', link:'https://www.deeplearning.ai/courses/', free:true },
@@ -88,11 +84,12 @@ const CERTS: Record<string, { name: string; provider: string; level: string; tim
   TensorFlow:  { stack:'TensorFlow',  name:'TensorFlow Developer Certificate',         provider:'Google',              level:'Intermédiaire', time:'~2 mois',     link:'https://www.tensorflow.org/certificate' },
   Docker:      { stack:'Docker',      name:'Docker Certified Associate',               provider:'Docker Inc.',         level:'Intermédiaire', time:'~6 semaines', link:'https://training.mirantis.com/certification/dca-certification-exam/' },
   'Power BI':  { stack:'Power BI',    name:'PL-300 Microsoft Power BI Data Analyst',   provider:'Microsoft',           level:'Intermédiaire', time:'~6 semaines', link:'https://learn.microsoft.com/certifications/power-bi-data-analyst-associate/' },
-  SQL:         { stack:'SQL',         name:'SQL for Data Science (Coursera)',           provider:'UC Davis / Coursera', level:'Débutant',      time:'~3 semaines', link:'https://www.coursera.org/learn/sql-for-data-science', free:true },
-  Terraform:   { stack:'Terraform',   name:'HashiCorp Terraform Associate',            provider:'HashiCorp',           level:'Intermédiaire', time:'~1 mois',     link:'https://developer.hashicorp.com/certifications/infrastructure-automation' },
+  SQL:         { stack:'SQL',         name:'SQL for Data Science',                     provider:'UC Davis / Coursera', level:'Débutant',      time:'~3 semaines', link:'https://www.coursera.org/learn/sql-for-data-science', free:true },
+  Bloomberg:   { stack:'Bloomberg',   name:'Bloomberg Market Concepts (BMC)',           provider:'Bloomberg',           level:'Débutant',      time:'~8 heures',   link:'https://www.bloomberg.com/professional/product/bloomberg-market-concepts/', free:true },
+  VBA:         { stack:'VBA',         name:'Excel VBA — Microsoft Office Specialist',  provider:'Microsoft',           level:'Intermédiaire', time:'~1 mois',     link:'https://learn.microsoft.com/certifications/mos-excel-2019/' },
+  R:           { stack:'R',           name:'Data Analysis with R',                     provider:'Duke / Coursera',     level:'Débutant',      time:'~4 semaines', link:'https://www.coursera.org/specializations/statistics', free:true },
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 function ageLabel(age: number) {
   if (age === 0) return "Aujourd'hui"
   if (age === 1) return 'Hier'
@@ -129,29 +126,28 @@ function contratClass(c:string) {
   return 'contrat-cdi'
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Home() {
-  const [tab, setTab]                   = useState<'offres'|'stacks'|'certifs'|'tracker'>('offres')
+  const [tab, setTab]                     = useState<'offres'|'stacks'|'certifs'|'tracker'>('offres')
   const [trackerFilter, setTrackerFilter] = useState<'all'|Status>('all')
-  const [jobs, setJobs]                 = useState<Job[]>([])
-  const [filtered, setFiltered]         = useState<Job[]>([])
-  const [loading, setLoading]           = useState(false)
-  const [loadingMore, setLoadingMore]   = useState(false)
-  const [error, setError]               = useState<string|null>(null)
-  const [query, setQuery]               = useState('data')
-  const [country, setCountry]           = useState('fr')
-  const [ville, setVille]               = useState('')
-  const [contrat, setContrat]           = useState('')
-  const [sort, setSort]                 = useState<SortKey>('date')
-  const [page, setPage]                 = useState(1)
-  const [hasMore, setHasMore]           = useState(true)
-  const [total, setTotal]               = useState(0)
-  const [skillFreq, setSkillFreq]       = useState<Record<string,number>>({})
-  const [statuses, setStatuses]         = useState<Record<string,Status>>({})
-  const [trackedJobs, setTrackedJobs]   = useState<Record<string,Job>>({})
-  const [syncMsg, setSyncMsg]           = useState('')
+  const [jobs, setJobs]                   = useState<Job[]>([])
+  const [filtered, setFiltered]           = useState<Job[]>([])
+  const [loading, setLoading]             = useState(false)
+  const [loadingMore, setLoadingMore]     = useState(false)
+  const [error, setError]                 = useState<string|null>(null)
+  const [query, setQuery]                 = useState('data')
+  const [country, setCountry]             = useState('fr')
+  const [ville, setVille]                 = useState('')
+  const [contrat, setContrat]             = useState('')
+  const [sort, setSort]                   = useState<SortKey>('date')
+  const [page, setPage]                   = useState(1)
+  const [hasMore, setHasMore]             = useState(true)
+  const [total, setTotal]                 = useState(0)
+  const [skillFreq, setSkillFreq]         = useState<Record<string,number>>({})
+  const [statuses, setStatuses]           = useState<Record<string,Status>>({})
+  const [trackedJobs, setTrackedJobs]     = useState<Record<string,Job>>({})
+  const [syncMsg, setSyncMsg]             = useState('')
 
-  // ── Charger depuis Supabase au démarrage ──
+  // Charger depuis Supabase au démarrage
   useEffect(() => {
     async function load() {
       const { data } = await supabase.from('candidatures').select('*')
@@ -161,10 +157,10 @@ export default function Home() {
       data.forEach((row:any) => {
         st[row.id] = row.status as Status
         tj[row.id] = {
-          id: row.id, title: row.title, company: row.company,
-          location: row.location, country: row.country,
-          contrat: row.contrat, age: row.age,
-          desc: '', tags: [], url: row.url, source: row.source,
+          id:row.id, title:row.title, company:row.company,
+          location:row.location, country:row.country,
+          contrat:row.contrat, age:row.age,
+          desc:'', tags:[], url:row.url, source:row.source,
         }
       })
       setStatuses(st)
@@ -172,6 +168,23 @@ export default function Home() {
     }
     load()
   }, [])
+
+  // Correspondance par titre+entreprise pour retrouver les statuts
+  // même si l'ID a changé entre deux sessions
+  const statusByMatch = useMemo(() => {
+    const map: Record<string, Status> = {}
+    Object.entries(trackedJobs).forEach(([id, job]) => {
+      if (statuses[id]) {
+        const key = `${job.title.trim()}|${job.company.trim()}`
+        map[key] = statuses[id]
+      }
+    })
+    return map
+  }, [trackedJobs, statuses])
+
+  const getStatus = (job: Job): Status | undefined =>
+    statuses[job.id] ||
+    statusByMatch[`${job.title.trim()}|${job.company.trim()}`]
 
   useEffect(() => { setVille('') }, [country])
 
@@ -192,49 +205,68 @@ export default function Home() {
       const res  = await fetch(`/api/jobs?${params}`)
       const data = await res.json()
       if (data.error) throw new Error(data.error)
+
       const newJobs: Job[] = (data.results||[]).map((j:any):Job=>({
-        id:       String(j.id??Math.random()),
-        title:    String(j.title??'—'),
-        company:  String(j.company??'—'),
-        location: String(j.location??'—'),
-        country:  String(j.country??country.toUpperCase()),
-        contrat:  String(j.contrat??'CDI'),
-        age:      Number(j.age??0),
-        desc:     String(j.desc??''),
-        tags:     Array.isArray(j.tags)?j.tags:[],
-        url:      String(j.url??'#'),
-        source:   String(j.source??'Adzuna'),
+        id:       String(j.id ?? Math.random()),
+        title:    String(j.title ?? '—'),
+        company:  String(j.company ?? '—'),
+        location: String(j.location ?? '—'),
+        country:  String(j.country ?? country.toUpperCase()),
+        contrat:  String(j.contrat ?? 'CDI'),
+        age:      Number(j.age ?? 0),
+        desc:     String(j.desc ?? ''),
+        tags:     Array.isArray(j.tags) ? j.tags : [],
+        url:      String(j.url ?? '#'),
+        source:   String(j.source ?? 'Adzuna'),
       }))
+
       setJobs(prev => {
-        const updated = append ? [...prev, ...newJobs] : newJobs
-        setHasMore(updated.length < (Number(data.count) || 0))
-        return updated
+        const all = append ? [...prev, ...newJobs] : newJobs
+        const seen = new Set<string>()
+        const unique = all.filter(j => {
+          if (seen.has(j.id)) return false
+          seen.add(j.id)
+          return true
+        })
+        setHasMore(unique.length < (Number(data.count) || 0))
+        return unique
       })
       setPage(p)
-      setTotal(Number(data.count)||0)
+      setTotal(Number(data.count) || 0)
     } catch(e:any) { setError(String(e.message)) }
     finally { setLoading(false); setLoadingMore(false) }
   }, [query, country, contrat])
 
   useEffect(() => { fetchJobs(1) }, [])
 
-  // ── Sauvegarder dans Supabase ──
-  const setStatus = async (job: Job, status: Status) => {
-    const isRemoving = statuses[job.id] === status
-    
+  const setStatus = async (job: Job, newStatus: Status) => {
+    const currentStatus = getStatus(job)
+    const isRemoving = currentStatus === newStatus
+
     if (isRemoving) {
+      // Supprimer par ID et par correspondance titre+entreprise
       await supabase.from('candidatures').delete().eq('id', job.id)
+      // Supprimer aussi l'éventuel ancien enregistrement avec titre+company
+      const matchKey = `${job.title.trim()}|${job.company.trim()}`
+      const oldId = Object.entries(trackedJobs).find(([,tj]) =>
+        `${tj.title.trim()}|${tj.company.trim()}` === matchKey
+      )?.[0]
+      if (oldId && oldId !== job.id) {
+        await supabase.from('candidatures').delete().eq('id', oldId)
+        setStatuses(prev => { const n={...prev}; delete n[oldId]; return n })
+        setTrackedJobs(prev => { const n={...prev}; delete n[oldId]; return n })
+      }
       setStatuses(prev => { const n={...prev}; delete n[job.id]; return n })
       setTrackedJobs(prev => { const n={...prev}; delete n[job.id]; return n })
     } else {
       await supabase.from('candidatures').upsert({
-        id: job.id, title: job.title, company: job.company,
-        location: job.location, country: job.country,
-        contrat: job.contrat, url: job.url, source: job.source,
-        age: job.age, status, updated_at: new Date().toISOString()
+        id:job.id, title:job.title, company:job.company,
+        location:job.location, country:job.country,
+        contrat:job.contrat, url:job.url, source:job.source,
+        age:job.age, status:newStatus, updated_at:new Date().toISOString()
       })
-      setStatuses(prev => ({...prev, [job.id]: status}))
-      setTrackedJobs(prev => ({...prev, [job.id]: job}))
+      setStatuses(prev => ({...prev, [job.id]:newStatus}))
+      setTrackedJobs(prev => ({...prev, [job.id]:job}))
       setSyncMsg('✅ Sauvegardé')
       setTimeout(() => setSyncMsg(''), 2000)
     }
@@ -247,8 +279,8 @@ export default function Home() {
   }
 
   const updateStatus = async (id: string, status: Status) => {
-    await supabase.from('candidatures').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
-    setStatuses(prev => ({...prev, [id]: status}))
+    await supabase.from('candidatures').update({status, updated_at:new Date().toISOString()}).eq('id', id)
+    setStatuses(prev => ({...prev, [id]:status}))
   }
 
   const newCount     = jobs.filter(j=>j.age<=1).length
@@ -256,11 +288,11 @@ export default function Home() {
   const topCerts     = [
     ...sortedSkills.filter(([k])=>CERTS[k]).map(([k])=>CERTS[k]),
     ...Object.values(CERTS).filter(c=>!sortedSkills.find(([k])=>k===c.stack)),
-  ].slice(0,14)
+  ].slice(0,16)
 
-  const trackedList  = Object.entries(statuses)
+  const trackedList     = Object.entries(statuses)
   const filteredTracker = trackerFilter==='all' ? trackedList : trackedList.filter(([,s])=>s===trackerFilter)
-  const cities = CITIES_BY_COUNTRY[country]||[]
+  const cities          = CITIES_BY_COUNTRY[country] || []
 
   const statusLabel: Record<Status,string> = { postule:'✅ Postulé', entretien:'🟡 Entretien', refus:'❌ Refus' }
   const statusClass: Record<Status,string> = { postule:'s-postule', entretien:'s-entretien', refus:'s-refus' }
@@ -279,10 +311,10 @@ export default function Home() {
         <nav className="nav">
           {(['offres','stacks','certifs','tracker'] as const).map(t=>(
             <button key={t} onClick={()=>setTab(t)} className={`nav-btn${tab===t?' active':''}`}>
-              {t==='offres'  ? <><Briefcase     size={12}/>Offres</>
-               :t==='stacks' ? <><TrendingUp    size={12}/>Skills</>
-               :t==='certifs'? <><Award         size={12}/>Certifs</>
-               :               <><ClipboardList size={12}/>Tracker</>}
+              {t==='offres'   ? <><Briefcase     size={12}/>Offres</>
+               :t==='stacks'  ? <><TrendingUp    size={12}/>Skills</>
+               :t==='certifs' ? <><Award         size={12}/>Certifs</>
+               :                <><ClipboardList size={12}/>Tracker</>}
             </button>
           ))}
         </nav>
@@ -290,7 +322,6 @@ export default function Home() {
 
       <div className="container">
 
-        {/* ── OFFRES ── */}
         {tab==='offres' && <>
           <div className="search-row">
             <div className="search-wrap">
@@ -343,11 +374,17 @@ export default function Home() {
            : filtered.length===0 ? <div className="empty">Aucune offre pour ces filtres.</div>
            : <>
               <div className="jobs-list">
-                {filtered.map(j=>{
-                  const st = statuses[j.id]
-                  const cardCls = `job-card${j.age<=1&&!st?' is-new':''} ${st==='postule'?' applied':''} ${st==='entretien'?' interview':''} ${st==='refus'?' rejected':''}`
+                {filtered.map((j, idx) => {
+                  const st = getStatus(j)
+                  const cardCls = [
+                    'job-card',
+                    j.age<=1&&!st ? 'is-new' : '',
+                    st==='postule'   ? 'applied'   : '',
+                    st==='entretien' ? 'interview'  : '',
+                    st==='refus'     ? 'rejected'   : '',
+                  ].filter(Boolean).join(' ')
                   return (
-                    <div key={j.id} className={cardCls}>
+                    <div key={`${j.id}_${idx}`} className={cardCls}>
                       <div className="job-header">
                         <div className="job-title">{j.title}</div>
                         <div className="job-age-wrap">
@@ -390,7 +427,6 @@ export default function Home() {
             </>}
         </>}
 
-        {/* ── SKILLS ── */}
         {tab==='stacks' && <>
           <p className="section-title">Skills les plus demandées · {filtered.length} offres analysées</p>
           {sortedSkills.length===0
@@ -409,7 +445,6 @@ export default function Home() {
               </div>}
         </>}
 
-        {/* ── CERTIFS ── */}
         {tab==='certifs' && <>
           <p className="section-title">Certifications recommandées · basées sur les skills du marché</p>
           {topCerts.length===0
@@ -439,7 +474,6 @@ export default function Home() {
               </div>}
         </>}
 
-        {/* ── TRACKER ── */}
         {tab==='tracker' && <>
           <div className="tracker-stats">
             <div className="tracker-stat"><div className="num t-blue">{trackedList.length}</div><div className="lbl">total</div></div>
@@ -448,7 +482,6 @@ export default function Home() {
             <div className="tracker-stat"><div className="num t-red">{trackedList.filter(([,s])=>s==='refus').length}</div><div className="lbl">refus</div></div>
           </div>
 
-          {/* Sous-filtres */}
           <div style={{display:'flex',gap:'6px',marginBottom:'16px',flexWrap:'wrap'}}>
             {(['all','postule','entretien','refus'] as const).map(f=>(
               <button key={f} onClick={()=>setTrackerFilter(f)}
@@ -468,7 +501,7 @@ export default function Home() {
           {filteredTracker.length===0
             ? <div className="tracker-empty">
                 <p style={{fontSize:'32px',marginBottom:'12px'}}>📋</p>
-                <p>{trackerFilter==='all'?"Aucune candidature suivie.":"Aucune candidature dans cette catégorie."}</p>
+                <p>{trackerFilter==='all'?'Aucune candidature suivie.':'Aucune candidature dans cette catégorie.'}</p>
                 {trackerFilter==='all' && <p style={{fontSize:'12px',color:'#334155',marginTop:'6px'}}>Clique sur ✅ Postulé sur une offre pour l'ajouter ici.</p>}
               </div>
             : <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
@@ -481,7 +514,6 @@ export default function Home() {
                       <div className="tracker-info">
                         <div className="tracker-title">{job.title}</div>
                         <div className="tracker-meta">{job.company} · {job.location} · {job.country} · {job.contrat}</div>
-                        {/* Changer le statut depuis le tracker */}
                         <div style={{display:'flex',gap:'5px',marginTop:'6px'}}>
                           {(['postule','entretien','refus'] as Status[]).map(s=>(
                             <button key={s} onClick={()=>updateStatus(id,s)}

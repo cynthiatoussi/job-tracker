@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const COUNTRY_CODES: Record<string, string> = {
-  fr: 'fr', gb: 'gb', de: 'de', be: 'be', nl: 'nl',
-  es: 'es', it: 'it', ch: 'ch', at: 'at', pl: 'pl',
-  lu: 'lu', pt: 'pt',
+  fr:'fr', gb:'gb', de:'de', be:'be', nl:'nl',
+  es:'es', it:'it', ch:'ch', at:'at', pl:'pl', lu:'lu', pt:'pt',
 }
 
 async function fetchAdzuna(what: string, page: string, perPage: string, country: string, contratFilter: string) {
@@ -18,7 +17,7 @@ async function fetchAdzuna(what: string, page: string, perPage: string, country:
   url.searchParams.set('what', what)
   url.searchParams.set('results_per_page', perPage)
   url.searchParams.set('content-type', 'application/json')
-  if (contratFilter === 'CDI') url.searchParams.set('contract_type', 'permanent')
+  if (contratFilter === 'CDI')   url.searchParams.set('contract_type', 'permanent')
   if (contratFilter === 'Stage') url.searchParams.set('contract_type', 'contract')
 
   const res = await fetch(url.toString())
@@ -28,11 +27,10 @@ async function fetchAdzuna(what: string, page: string, perPage: string, country:
   const jobs = (data.results || []).map((j: any) => {
     let contrat = 'CDI'
     if (j.contract_type === 'contract') contrat = 'Stage'
-    if (j.title && /alternance|apprentissage|alternant/i.test(j.title)) contrat = 'Alternance'
-    if (j.description && /alternance|apprentissage/i.test(j.description)) contrat = 'Alternance'
-
+    const txt = `${j.title || ''} ${j.description || ''}`
+    if (/alternance|apprentissage|alternant/i.test(txt)) contrat = 'Alternance'
     return {
-      id:       String(j.id),
+      id:       String(j.id), // ID Adzuna stable
       title:    String(j.title || '—'),
       company:  String(j.company?.display_name || '—'),
       location: String((j.location?.area)?.[2] || j.location?.display_name || '—'),
@@ -55,7 +53,7 @@ async function fetchGoogleJobs(what: string, country: string) {
 
   const countryNames: Record<string,string> = {
     fr:'France', gb:'United Kingdom', de:'Allemagne', be:'Belgique',
-    nl:'Pays-Bas', es:'Espagne', it:'Italie', ch:'Suisse', at:'Autriche'
+    nl:'Pays-Bas', es:'Espagne', it:'Italie', ch:'Suisse', at:'Autriche', lu:'Luxembourg', pt:'Portugal'
   }
   const countryName = countryNames[country] || 'France'
 
@@ -71,7 +69,7 @@ async function fetchGoogleJobs(what: string, country: string) {
   if (!res.ok) return []
   const data = await res.json()
 
-  return (data.jobs_results || []).map((j: any, i: number) => {
+  return (data.jobs_results || []).map((j: any) => {
     const dateStr = String(j.detected_extensions?.posted_at || '')
     let age = 7
     if (dateStr.includes('hour') || dateStr.includes('heure')) age = 0
@@ -80,13 +78,16 @@ async function fetchGoogleJobs(what: string, country: string) {
     else if (dateStr.includes('month') || dateStr.includes('mois')) age = 30
 
     let contrat = 'CDI'
-    const txt = `${j.title} ${j.description || ''}`
+    const txt = `${j.title || ''} ${j.description || ''}`
     if (/alternance|apprentissage|alternant/i.test(txt)) contrat = 'Alternance'
     else if (/stage|internship|intern\b/i.test(txt)) contrat = 'Stage'
 
+    // ID stable basé uniquement sur titre + entreprise (sans index)
+    const stableKey = `${j.title || ''}|${j.company_name || ''}`
+    const stableId  = `serp_${Buffer.from(stableKey).toString('base64url').slice(0, 24)}`
+
     return {
-      // Après — ID stable basé sur titre + entreprise
-      id: `serp_${Buffer.from(`${j.title}|${j.company_name}`).toString('base64').slice(0, 20)}`,
+      id:       stableId,
       title:    String(j.title || '—'),
       company:  String(j.company_name || '—'),
       location: String(j.location || countryName),
@@ -103,11 +104,11 @@ async function fetchGoogleJobs(what: string, country: string) {
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const what    = searchParams.get('what')    || 'data'
-  const page    = searchParams.get('page')    || '1'
-  const perPage = searchParams.get('per_page')|| '20'
-  const country = searchParams.get('country') || 'fr'
-  const contrat = searchParams.get('contrat') || ''
+  const what    = searchParams.get('what')     || 'data'
+  const page    = searchParams.get('page')     || '1'
+  const perPage = searchParams.get('per_page') || '20'
+  const country = searchParams.get('country')  || 'fr'
+  const contrat = searchParams.get('contrat')  || ''
 
   const [adzunaResult, googleResult] = await Promise.allSettled([
     fetchAdzuna(what, page, perPage, country, contrat),
@@ -118,11 +119,11 @@ export async function GET(req: NextRequest) {
   const adzunaTotal = adzunaResult.status === 'fulfilled' ? adzunaResult.value.total : 0
   const googleJobs  = googleResult.status === 'fulfilled' ? googleResult.value       : []
 
+  // Déduplication par ID
   const seen   = new Set<string>()
   const unique = [...adzunaJobs, ...googleJobs].filter(j => {
-    const key = `${j.title.toLowerCase()}|${j.company.toLowerCase()}`
-    if (seen.has(key)) return false
-    seen.add(key)
+    if (seen.has(j.id)) return false
+    seen.add(j.id)
     return true
   })
 
